@@ -16,8 +16,8 @@ mcp = FastMCP("mcp-weather")
 CACHE_DIR = Path.home() / ".cache" / "weather"
 LOCATION_CACHE_FILE = CACHE_DIR / "location_cache.json"
 
-def get_cached_location_key(location: str) -> Optional[str]:
-    """Get location key from cache."""
+def get_cached_location_data(location: str) -> Optional[Dict]:
+    """Get location data from cache."""
     if not LOCATION_CACHE_FILE.exists():
         return None
     
@@ -28,8 +28,8 @@ def get_cached_location_key(location: str) -> Optional[str]:
     except (json.JSONDecodeError, FileNotFoundError):
         return None
 
-def cache_location_key(location: str, location_key: str):
-    """Cache location key for future use."""
+def cache_location_data(location: str, location_data: Dict):
+    """Cache location data for future use."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     
     try:
@@ -39,12 +39,12 @@ def cache_location_key(location: str, location_key: str):
         else:
             cache = {}
         
-        cache[location] = location_key
+        cache[location] = location_data
         
         with open(LOCATION_CACHE_FILE, "w") as f:
             json.dump(cache, f, indent=2)
     except Exception as e:
-        print(f"Warning: Failed to cache location key: {e}")
+        print(f"Warning: Failed to cache location data: {e}")
 
 @mcp.tool()
 async def get_hourly_weather(location: str) -> Dict:
@@ -52,11 +52,11 @@ async def get_hourly_weather(location: str) -> Dict:
     api_key = os.getenv("ACCUWEATHER_API_KEY")
     base_url = "http://dataservice.accuweather.com"
     
-    # Try to get location key from cache first
-    location_key = get_cached_location_key(location)
+    # Try to get location data from cache first
+    cached_location_data = get_cached_location_data(location)
     
     async with ClientSession() as session:
-        if not location_key:
+        if not cached_location_data:
             location_search_url = f"{base_url}/locations/v1/cities/search"
             params = {
                 "apikey": api_key,
@@ -69,9 +69,13 @@ async def get_hourly_weather(location: str) -> Dict:
                 if not locations or len(locations) == 0:
                     raise Exception("Location not found")
             
-            location_key = locations[0]["Key"]
-            # Cache the location key for future use
-            cache_location_key(location, location_key)
+            location_data = locations[0]
+            location_key = location_data["Key"]
+            # Cache the location data for future use
+            cache_location_data(location, location_data)
+        else:
+            location_data = cached_location_data
+            location_key = location_data["Key"]
         
         # Get current conditions
         current_conditions_url = f"{base_url}/currentconditions/v1/{location_key}"
@@ -122,9 +126,9 @@ async def get_hourly_weather(location: str) -> Dict:
             current_data = "No current conditions available"
         
         return {
-            "location": locations[0]["LocalizedName"],
+            "location": location_data["LocalizedName"],
             "location_key": location_key,
-            "country": locations[0]["Country"]["LocalizedName"],
+            "country": location_data["Country"]["LocalizedName"],
             "current_conditions": current_data,
             "hourly_forecast": hourly_data
         } 
