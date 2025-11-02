@@ -29,7 +29,7 @@ def get_cached_location_data(location: str) -> Optional[Dict]:
         return None
 
 def cache_location_data(location: str, location_data: Dict):
-    """Cache location data for future use."""
+    """Cache location data."""
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     
     try:
@@ -39,7 +39,13 @@ def cache_location_data(location: str, location_data: Dict):
         else:
             cache = {}
         
-        cache[location] = location_data
+        cache[location] = {
+            "Key": location_data["Key"],
+            "LocalizedName": location_data["LocalizedName"],
+            "Country": {
+                "LocalizedName": location_data["Country"]["LocalizedName"]
+            }
+        }
         
         with open(LOCATION_CACHE_FILE, "w") as f:
             json.dump(cache, f, indent=2)
@@ -68,14 +74,16 @@ async def get_hourly_weather(location: str) -> Dict:
                     raise Exception(f"Error fetching location data: {response.status}, {locations}")
                 if not locations or len(locations) == 0:
                     raise Exception("Location not found")
-            
-            location_data = locations[0]
-            location_key = location_data["Key"]
+
+            location_key = locations[0]["Key"]
+            localized_name = locations[0]["LocalizedName"]
+            country = locations[0]["Country"]["LocalizedName"]
             # Cache the location data for future use
-            cache_location_data(location, location_data)
+            cache_location_data(location, locations[0])
         else:
-            location_data = cached_location_data
-            location_key = location_data["Key"]
+            location_key = cached_location_data["Key"]
+            localized_name = cached_location_data["LocalizedName"]
+            country = cached_location_data["Country"]["LocalizedName"]
         
         # Get current conditions
         current_conditions_url = f"{base_url}/currentconditions/v1/{location_key}"
@@ -126,9 +134,9 @@ async def get_hourly_weather(location: str) -> Dict:
             current_data = "No current conditions available"
         
         return {
-            "location": location_data["LocalizedName"],
+            "location": localized_name,
             "location_key": location_key,
-            "country": location_data["Country"]["LocalizedName"],
+            "country": country,
             "current_conditions": current_data,
             "hourly_forecast": hourly_data
         } 
